@@ -35,6 +35,9 @@
 - 前端：原生 HTML/CSS/JS
 
 ## 评测结果
+跑评测 
+cd D:\demo3\tests
+python eval_match.py
 | 指标 | 结果 |
 |---|---|
 | JSON 合法率 | 100% |
@@ -49,3 +52,13 @@ python -m venv .venv
 pip install -r requirements.txt
 # 配 .env：DASHSCOPE_API_KEY=sk-xxx, LLM_MODEL=qwen-plus
 uvicorn main:app --port 8001
+## 线上地址
+http://121.40.172.119:8080/
+
+## 评测结果
+| 指标 | 结果 |
+|---|---|
+| JSON 合法率 | 100% |
+| 字段完整率 | 100% |
+| 分数标准差 | 0.00（3 次完全一致） |
+| 平均响应时间 | 23.1s |

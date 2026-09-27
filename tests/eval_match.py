@@ -1,4 +1,6 @@
-
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 """评测 MatchReport 的 4 个指标：JSON 合法率、字段完整率、稳定性、响应时间。"""
 import json
 import time

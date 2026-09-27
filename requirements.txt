@@ -4,4 +4,5 @@ pydantic
 dashscope
 langchain
 langchain-community
+python-dotenv
 python-multipart
