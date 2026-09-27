@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>JD-简历匹配助手</title>
+  <style>
+    :root { --bg:#f5f6f8; --card:#fff; --border:#e3e6ea; --text:#1f2329;
+            --muted:#8a9099; --primary:#2563eb; --ok:#16a34a; --err:#dc2626; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text);
+           font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    .wrap { max-width:1100px; margin:0 auto; padding:32px 20px 80px; }
+    h1 { font-size:22px; margin:0 0 6px; }
+    .sub { color:var(--muted); font-size:14px; margin-bottom:24px; }
+
+    .card { background:var(--card); border:1px solid var(--border);
+            border-radius:12px; padding:20px; margin-bottom:16px; }
+    .card h2 { font-size:15px; margin:0 0 12px; color:var(--text); font-weight:600; }
+
+    textarea {
+      width:100%; padding:12px; font-size:14px; font-family:inherit;
+      border:1px solid var(--border); border-radius:8px; outline:none;
+      min-height:120px; resize:vertical;
+    }
+    textarea:focus { border-color:var(--primary); }
+
+    .jd-row { display:flex; gap:8px; align-items:flex-start; margin-bottom:10px; }
+    .jd-row .jd-name {
+      width:180px; padding:10px 12px; font-size:14px;
+      border:1px solid var(--border); border-radius:8px; outline:none;
+      flex-shrink:0;
+    }
+    .jd-row .jd-body { flex:1; min-height:100px; }
+    .jd-row .jd-actions { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
+
+    .icon-btn {
+      padding:8px 12px; font-size:13px; border:1px solid var(--border);
+      background:#fff; border-radius:8px; cursor:pointer; white-space:nowrap;
+    }
+    .icon-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .icon-btn.danger:hover { border-color:var(--err); color:var(--err); }
+
+    .btn-primary {
+      padding:12px 24px; font-size:15px; border:none; border-radius:8px;
+      background:var(--primary); color:#fff; cursor:pointer;
+    }
+    .btn-primary:disabled { opacity:.55; cursor:not-allowed; }
+
+    .actions { display:flex; gap:12px; align-items:center; margin-top:16px; }
+    .status { font-size:14px; color:var(--muted); }
+
+    .hidden { display:none; }
+
+    /* 结果 */
+    .rank-table { width:100%; border-collapse:collapse; margin-top:8px; }
+    .rank-table th, .rank-table td {
+      padding:10px 12px; text-align:left; font-size:14px;
+      border-bottom:1px solid var(--border);
+    }
+    .rank-table th { color:var(--muted); font-weight:500; font-size:13px; }
+    .score { font-weight:600; font-size:16px; }
+    .score.high { color:var(--ok); }
+    .score.mid { color:#d97706; }
+    .score.low { color:var(--err); }
+    .tag { display:inline-block; padding:2px 8px; border-radius:10px;
+           font-size:12px; margin:2px 4px 2px 0; }
+    .tag.must { background:#fef3c7; color:#92400e; }
+    .tag.nice { background:#e0e7ff; color:#3730a3; }
+    .tag.match { background:#dcfce7; color:#166534; }
+
+    details { border:1px solid var(--border); border-radius:8px;
+              padding:10px 14px; margin-top:8px; background:#fafbfc; }
+    details summary { cursor:pointer; font-weight:500; font-size:14px; }
+    details pre { white-space:pre-wrap; word-break:break-word; font-size:13px;
+                  line-height:1.7; margin:10px 0 0; font-family:inherit; color:#444; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>📋 JD-简历匹配助手</h1>
+    <div class="sub">批量对比多个 JD，找出最匹配的岗位和缺口技能</div>
+
+    <!-- 简历 -->
+    <div class="card">
+      <h2>① 简历</h2>
+      <textarea id="resume" placeholder="粘贴简历文本..."></textarea>
+    </div>
+
+    <!-- JD 列表 -->
+    <div class="card">
+      <h2>② JD 列表（可添加多条，也可上传 .md / .txt 文件）</h2>
+      <div id="jd-list"></div>
+      <button class="icon-btn" id="add-jd" style="margin-top:8px">➕ 添加一条 JD</button>
+    </div>
+
+    <!-- 操作 -->
+    <div class="actions">
+      <button class="btn-primary" id="run">开始对比</button>
+      <span class="status" id="status"></span>
+    </div>
+
+    <!-- 结果 -->
+    <div id="result" class="hidden">
+      <div class="card">
+        <h2>③ 匹配排名</h2>
+        <table class="rank-table" id="rank-table"></table>
+      </div>
+      <div class="card">
+        <h2>④ 缺口技能并集（所有 JD 都需要的技能）</h2>
+        <div id="missing-union"></div>
+      </div>
+      <div class="card">
+        <h2>⑤ 逐条详情</h2>
+        <div id="details"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    // ---- JD 行管理 ----
+    let jdSeq = 0;
+    function createJdRow(name = "", body = "") {
+      jdSeq += 1;
+      const row = document.createElement("div");
+      row.className = "jd-row";
+      row.innerHTML = `
+        <input class="jd-name" type="text" placeholder="岗位名称" value="${name}" />
+        <textarea class="jd-body" placeholder="粘贴 JD 文本...">${body}</textarea>
+        <div class="jd-actions">
+          <button class="icon-btn" data-act="upload">📎 上传</button>
+          <button class="icon-btn danger" data-act="remove">✕ 删除</button>
+          <input type="file" accept=".md,.txt" hidden />
+        </div>
+      `;
+      const fileInput = row.querySelector("input[type=file]");
+      const nameInput = row.querySelector(".jd-name");
+      const bodyInput = row.querySelector(".jd-body");
+
+      row.querySelector('[data-act="upload"]').addEventListener("click", () => {
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append("file", file);
+        try {
+          const res = await fetch("/upload_jd", { method: "POST", body: fd });
+          if (!res.ok) throw new Error((await res.json()).detail || res.status);
+          const data = await res.json();
+          if (!nameInput.value) nameInput.value = data.filename.replace(/\.[^.]+$/, "");
+          bodyInput.value = data.content;
+        } catch (err) {
+          alert("上传失败: " + err.message);
+        } finally {
+          e.target.value = "";
+        }
+      });
+
+      row.querySelector('[data-act="remove"]').addEventListener("click", () => {
+        row.remove();
+      });
+
+      return row;
+    }
+
+    function addJdRow(name = "", body = "") {
+      $("jd-list").appendChild(createJdRow(name, body));
+    }
+    $("add-jd").addEventListener("click", () => addJdRow());
+
+    // 初始给 3 条空白
+    addJdRow();
+    addJdRow();
+    addJdRow();
+
+    // ---- 提交 ----
+    $("run").addEventListener("click", async () => {
+      const resume = $("resume").value.trim();
+      if (!resume) { alert("请填写简历"); return; }
+
+      const items = [];
+      document.querySelectorAll(".jd-row").forEach((row) => {
+        const name = row.querySelector(".jd-name").value.trim();
+        const jd = row.querySelector(".jd-body").value.trim();
+        if (jd) items.push({ name: name || `JD-${items.length + 1}`, jd });
+      });
+
+      if (items.length === 0) { alert("请至少填写一条 JD"); return; }
+
+      $("run").disabled = true;
+      $("status").textContent = `分析中（${items.length} 条 JD 并发处理，约 30-60 秒）...`;
+      $("result").classList.add("hidden");
+
+      try {
+        const res = await fetch("/compare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items, resume }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        render(data);
+        $("status").textContent = "✅ 完成";
+      } catch (e) {
+        $("status").textContent = "❌ " + e.message;
+      } finally {
+        $("run").disabled = false;
+      }
+    });
+
+    // ---- 渲染 ----
+    function scoreClass(score) {
+      if (score >= 75) return "high";
+      if (score >= 50) return "mid";
+      return "low";
+    }
+
+    function render(data) {
+      // 排名表
+      const table = $("rank-table");
+      table.innerHTML = `
+        <thead><tr>
+          <th>排名</th><th>岗位</th><th>匹配分</th><th>风险</th>
+          <th>主要缺口</th>
+        </tr></thead>
+        <tbody></tbody>
+      `;
+      const tbody = table.querySelector("tbody");
+      data.ranking.forEach((name, i) => {
+        const item = data.results.find((r) => r.name === name);
+        if (!item || !item.report) return;
+        const rp = item.report;
+        const missing = rp.missing_skills.slice(0, 3).map((s) =>
+          `<span class="tag must">${s.name}</span>`).join("");
+        tbody.innerHTML += `
+          <tr>
+            <td>${i + 1}</td>
+            <td><b>${name}</b></td>
+            <td><span class="score ${scoreClass(rp.overall_score)}">${rp.overall_score}</span></td>
+            <td>${rp.risk_level}</td>
+            <td>${missing}</td>
+          </tr>
+        `;
+      });
+
+      // 缺口并集
+      const union = $("missing-union");
+      union.innerHTML = (data.missing_union || []).map((s) =>
+        `<span class="tag must">${s}</span>`).join("") || "<span style='color:#999'>无</span>";
+
+      // 详情
+      const details = $("details");
+      details.innerHTML = "";
+      data.results.forEach((item) => {
+        const d = document.createElement("details");
+        if (item.error) {
+          d.innerHTML = `<summary>${item.name}（失败）</summary><pre>${item.error}</pre>`;
+        } else {
+          const rp = item.report;
+          d.innerHTML = `
+            <summary>${item.name} · ${rp.overall_score} 分 · 风险 ${rp.risk_level}</summary>
+            <pre>${JSON.stringify(rp, null, 2)}</pre>
+          `;
+        }
+        details.appendChild(d);
+      });
+
+      $("result").classList.remove("hidden");
+    }
+  </script>
+</body>
+</html>
